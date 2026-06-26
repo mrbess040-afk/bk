@@ -1,0 +1,157 @@
+//@version=5
+indicator("AI Smart Dashboard", overlay=true, max_bars_back=500)
+
+// ============================================
+// AI SMART DASHBOARD - Multi-Indicator System
+// ============================================
+
+// Input Parameters
+show_signals = input(true, "Show Buy/Sell Signals")
+show_labels = input(true, "Show Dashboard Labels")
+label_position = input.string("Top Right", "Label Position", options=["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
+
+// ============================================
+// INDICATOR CALCULATIONS
+// ============================================
+
+// 1. EMA (Exponential Moving Average)
+ema_period = input(20, "EMA Period")
+ema = ta.ema(close, ema_period)
+ema_signal = close > ema ? 1 : 0  // 1 = BUY, 0 = SELL
+
+// 2. SuperTrend
+atr_period = input(10, "SuperTrend ATR Period")
+multiplier = input(3.0, "SuperTrend Multiplier")
+[st_line, st_direction] = ta.supertrend(multiplier, atr_period)
+st_signal = st_direction == -1 ? 1 : 0  // 1 = BUY, 0 = SELL
+
+// 3. RSI (Relative Strength Index)
+rsi_period = input(14, "RSI Period")
+rsi = ta.rsi(close, rsi_period)
+rsi_signal = rsi > 50 ? 1 : 0  // 1 = BUY, 0 = SELL
+
+// 4. MACD
+macd_fast = input(12, "MACD Fast")
+macd_slow = input(26, "MACD Slow")
+macd_signal_period = input(9, "MACD Signal")
+[macd_line, macd_signal_line, macd_hist] = ta.macd(close, macd_fast, macd_slow, macd_signal_period)
+macd_signal = macd_line > macd_signal_line ? 1 : 0  // 1 = BUY, 0 = SELL
+
+// 5. ADX (Average Directional Index)
+adx_period = input(14, "ADX Period")
+adx = ta.adx(adx_period)
+adx_strength = adx > 25 ? "STRONG" : (adx > 20 ? "GOOD" : "WEAK")
+adx_signal = adx > 20 ? 1 : 0
+
+// 6. CCI (Commodity Channel Index)
+cci_period = input(20, "CCI Period")
+cci = ta.cci(close, cci_period)
+cci_signal = cci > 0 ? 1 : 0  // 1 = BUY, 0 = SELL
+
+// 7. Stochastic
+stoch_k_period = input(14, "Stoch K Period")
+stoch_d_period = input(3, "Stoch D Period")
+stoch_smooth_period = input(3, "Stoch Smooth Period")
+[stoch_k, stoch_d] = ta.stoch(close, high, low, stoch_k_period)
+stoch_k_smooth = ta.sma(stoch_k, stoch_smooth_period)
+stoch_d_smooth = ta.sma(stoch_d, stoch_smooth_period)
+stoch_signal = stoch_k_smooth > 50 ? 1 : 0
+
+// 8. Liquidity Check (Volume-based)
+vol_sma = ta.sma(volume, 20)
+liquidity_signal = volume > vol_sma * 0.8 ? 1 : 0  // 1 = OK, 0 = LOW
+
+// 9. Order Block Detection (using recent support/resistance)
+ob_lookback = input(20, "Order Block Lookback")
+recent_low = ta.lowest(low, ob_lookback)
+recent_high = ta.highest(high, ob_lookback)
+ob_signal = (close > recent_low + (recent_high - recent_low) * 0.5) ? 1 : 0  // 1 = BUY, 0 = SELL
+
+// 10. Break of Structure (BOS) - Simple trend detection
+bos_lookback = input(50, "BOS Lookback")
+higher_high = high > ta.highest(high, bos_lookback)[1]
+higher_low = low > ta.lowest(low, bos_lookback)[1]
+bos_signal = (higher_high and higher_low) ? 1 : 0
+
+// 11. Change of Character (CHOCH) - Trend reversal
+choch_lookback = input(50, "CHOCH Lookback")
+lower_high = high < ta.highest(high, choch_lookback)[1]
+lower_low = low < ta.lowest(low, choch_lookback)[1]
+choch_signal = (lower_high and lower_low) ? -1 : 0  // -1 = POTENTIAL REVERSAL
+
+// 12. Fair Value Gap (FVG) Detection
+fvg_signal = 0
+if high[2] < low[0]  // Bullish FVG
+    fvg_signal := 1
+else if low[2] > high[0]  // Bearish FVG
+    fvg_signal := -1
+
+// 13. ATR (Average True Range) - Volatility
+atr = ta.atr(14)
+atr_sma = ta.sma(atr, 14)
+atr_level = atr > atr_sma ? "HIGH" : "NORMAL"
+atr_signal = atr > atr_sma ? 1 : 0
+
+// ============================================
+// AI SCORE CALCULATION
+// ============================================
+
+total_signals = ema_signal + st_signal + rsi_signal + macd_signal + adx_signal + cci_signal + stoch_signal + liquidity_signal + ob_signal + bos_signal + atr_signal
+
+ai_score = (total_signals / 11) * 100
+
+final_signal = ai_score > 80 ? "STRONG BUY" : (ai_score > 60 ? "BUY" : (ai_score > 40 ? "NEUTRAL" : "SELL"))
+
+// ============================================
+// DISPLAY SIGNALS
+// ============================================
+
+// Plot main indicators
+plot(ema, "EMA", color=color.blue, linewidth=2)
+plot(st_line, "SuperTrend", color=color.orange, linewidth=1)
+
+// Buy/Sell signals
+buy_signal = (ai_score > 80)
+sell_signal = (ai_score < 40)
+
+plotshape(buy_signal and show_signals, "Buy Signal", shape.labelup, location.belowbar, color.new(color.green, 0), size=size.large)
+plotshape(sell_signal and show_signals, "Sell Signal", shape.labeldown, location.abovebar, color.new(color.red, 0), size=size.large)
+
+// ============================================
+// DASHBOARD DISPLAY
+// ============================================
+
+if show_labels
+    dashboard_text = "AI SMART DASHBOARD\n" +
+                     "═══════════════════\n" +
+                     "EMA:          " + (ema_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "SuperTrend:   " + (st_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "RSI:          " + (rsi_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "MACD:         " + (macd_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "ADX:          " + adx_strength + "\n" +
+                     "CCI:          " + (cci_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "STOCH:        " + (stoch_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "Liquidity:    " + (liquidity_signal ? "✅ OK" : "⚠️  LOW") + "\n" +
+                     "Order Block:  " + (ob_signal ? "🟢 BUY" : "🔴 SELL") + "\n" +
+                     "BOS:          " + (bos_signal ? "🟢 BUY" : "🔴 NONE") + "\n" +
+                     "CHOCH:        " + (choch_signal < 0 ? "⚠️  REVERSAL" : "🔵 NONE") + "\n" +
+                     "FVG:          " + (fvg_signal > 0 ? "🟢 BUY" : (fvg_signal < 0 ? "🔴 SELL" : "🔵 NONE")) + "\n" +
+                     "ATR:          " + atr_level + "\n" +
+                     "Volume:       " + (volume > vol_sma ? "📊 HIGH" : "📊 NORMAL") + "\n" +
+                     "═══════════════════\n" +
+                     "AI SCORE:     " + str.tostring(math.round(ai_score, 1)) + "%\n" +
+                     "SIGNAL:       " + final_signal
+    
+    label_pos = label_position == "Top Left" ? position.top_left : 
+                label_position == "Top Right" ? position.top_right :
+                label_position == "Bottom Left" ? position.bottom_left : position.bottom_right
+    
+    label.new(bar_index, high, dashboard_text, xloc=bar_index, yloc=yloc.price, color=color.new(color.navy, 80), textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// ============================================
+// ALERTS
+// ============================================
+
+alertcondition(buy_signal, title="Strong Buy Signal", message="AI Dashboard: STRONG BUY - Score: " + str.tostring(math.round(ai_score, 1)) + "%")
+alertcondition(sell_signal, title="Strong Sell Signal", message="AI Dashboard: SELL - Score: " + str.tostring(math.round(ai_score, 1)) + "%")
+alertcondition(choch_signal < 0, title="Change of Character", message="⚠️ Potential Trend Reversal Detected!")
